@@ -1,0 +1,29 @@
+{
+  "patientId": "P003",
+  "name": "Sandra Reyes",
+  "age": 61,
+  "conditions": ["Chronic Lower Back Pain", "Major Depressive Disorder", "Osteoarthritis (knees)"],
+  "medications": ["Naproxen 500mg", "Duloxetine 60mg", "Pantoprazole 40mg (gastric protection)"],
+  "visits": [
+    {
+      "date": "2024-08-14",
+      "reason": "Back pain flare-up",
+      "notes": "Pain rated 7/10, radiating to left leg. MRI shows L4-L5 disc bulge. Referred to physiotherapy."
+    },
+    {
+      "date": "2024-10-30",
+      "reason": "Depression review",
+      "notes": "PHQ-9 score 14 (moderate depression). Reports low energy, loss of interest, poor appetite. Duloxetine continued, added benefit for neuropathic pain component."
+    },
+    {
+      "date": "2025-01-09",
+      "reason": "Knee pain and reduced mobility",
+      "notes": "Bilateral knee crepitus, swelling in right knee. X-ray confirms moderate osteoarthritis. Advised weight management and low-impact exercise. Physiotherapy extended."
+    },
+    {
+      "date": "2025-03-15",
+      "reason": "Follow-up — pain and mood",
+      "notes": "PHQ-9 score 9 (mild depression), improved. Back pain 4/10. Patient reports fatigue and occasional dizziness possibly related to Naproxen. Gastric symptoms noted, Pantoprazole added."
+    }
+  ]
+}

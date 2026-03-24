@@ -1,0 +1,24 @@
+{
+  "patientId": "P002",
+  "name": "James Okafor",
+  "age": 34,
+  "conditions": ["Asthma", "Generalized Anxiety Disorder"],
+  "medications": ["Albuterol inhaler (as needed)", "Sertraline 50mg"],
+  "visits": [
+    {
+      "date": "2024-09-05",
+      "reason": "Asthma follow-up",
+      "notes": "Peak flow normal, no nocturnal symptoms. Inhaler technique reviewed."
+    },
+    {
+      "date": "2024-12-18",
+      "reason": "Anxiety and sleep disturbance",
+      "notes": "Reports increased work stress, difficulty sleeping, racing thoughts. Sertraline increased to 100mg. Referred to CBT."
+    },
+    {
+      "date": "2025-03-02",
+      "reason": "Chest tightness and shortness of breath",
+      "notes": "Triggered by exercise and cold air. Ruled out cardiac cause. Advised to use inhaler 15 minutes before exercise."
+    }
+  ]
+}

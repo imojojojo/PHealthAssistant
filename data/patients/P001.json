@@ -1,0 +1,19 @@
+{
+  "patientId": "P001",
+  "name": "Alice Morgan",
+  "age": 52,
+  "conditions": ["Type 2 Diabetes", "Hypertension"],
+  "medications": ["Metformin 500mg", "Lisinopril 10mg"],
+  "visits": [
+    {
+      "date": "2024-11-10",
+      "reason": "Routine checkup",
+      "notes": "HbA1c 7.2, BP 138/88, stable"
+    },
+    {
+      "date": "2025-02-20",
+      "reason": "Dizziness and fatigue",
+      "notes": "Adjusted Lisinopril to 20mg, referred for blood panel"
+    }
+  ]
+}
