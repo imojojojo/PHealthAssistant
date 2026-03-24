@@ -70,7 +70,7 @@ class ChromaVectorStore(VectorStorePort):
             limit=limit,
             include=["documents", "metadatas"],
         )
-        return self._to_chunks(result.ids, result.documents, result.metadatas)
+        return self._to_chunks(result["ids"], result["documents"], result["metadatas"])
 
     async def similarity_search(
         self,
@@ -87,10 +87,10 @@ class ChromaVectorStore(VectorStorePort):
             include=["documents", "metadatas", "distances"],
         )
 
-        ids = result.ids[0]
-        documents = result.documents[0]
-        metadatas = result.metadatas[0]
-        distances = result.distances[0]
+        ids = result["ids"][0]
+        documents = result["documents"][0]
+        metadatas = result["metadatas"][0]
+        distances = result["distances"][0]
 
         # cosine distance → similarity: similarity = 1 - distance
         chunks = []
