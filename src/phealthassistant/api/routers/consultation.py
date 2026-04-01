@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter
 
-from phealthassistant.api.deps import AgentDep
+from phealthassistant.api.deps import AgentDep, LanggraphAgentDep
 from phealthassistant.domain.consultation.models import ConsultationResult
 
 router = APIRouter(prefix="/consultation", tags=["Consultation"])
@@ -23,7 +23,7 @@ class ConsultationRequest(BaseModel):
 
 
 @router.post("", response_model=ConsultationResult)
-async def consult(request: ConsultationRequest, agent: AgentDep) -> ConsultationResult:
+async def consult(request: ConsultationRequest, agent: LanggraphAgentDep) -> ConsultationResult:
     """
     Run a clinical consultation for the given patient.
     The AI agent will autonomously retrieve relevant patient history
