@@ -6,6 +6,7 @@ from typing_extensions import TypedDict
 
 from functools import partial
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from phealthassistant.application.retrieval.service import PatientContextService
 from phealthassistant.application.ports.llm import LLMPort
@@ -36,7 +37,6 @@ class AgentState(TypedDict):
     history_text: Optional[str]
     relevant_text: Optional[str]
     llm_response: Optional[str]
-    result: Optional[ConsultationResult]
 
 async def retrieve_context(state: AgentState, retrieval: PatientContextService) -> dict:
     history_chunks = await retrieval.get_patient_history(state["patient_id"])
@@ -69,13 +69,9 @@ def parse_output(state: AgentState) -> dict:
     if json_matches:
         text = json_matches[-1]
     data = json.loads(text)
-    consultation = StructuredConsultation.model_validate(data)
-    result = ConsultationResult(
-        patient_id=state["patient_id"],
-        question=state["question"],
-        consultation=consultation,
-    )
-    return {"result": result}
+    StructuredConsultation.model_validate(data)
+    return {"llm_response": text}
+    
 
 def build_graph(llm: LLMPort, retrieval: PatientContextService) -> StateGraph:
     graph = StateGraph(AgentState)
@@ -89,7 +85,8 @@ def build_graph(llm: LLMPort, retrieval: PatientContextService) -> StateGraph:
     graph.add_edge("call_llm", "parse_output")
     graph.add_edge("parse_output", END)
 
-    return graph.compile()
+    checkpointer = MemorySaver()
+    return graph.compile(checkpointer=checkpointer)
 
 class LangGraphClinicalAgentService:
     def __init__(self, llm: LLMPort, retrieval: PatientContextService) -> None:
@@ -101,8 +98,10 @@ class LangGraphClinicalAgentService:
             "question": question,
             "history_text": None,
             "relevant_text": None,
-            "llm_response": None,
-            "result": None,
+            "llm_response": None
         }
-        final_state = await self._graph.ainvoke(initial_state)
-        return final_state["result"]
+
+        config = {"configurable": {"thread_id": f"{patient_id}"}}
+        final_state = await self._graph.ainvoke(initial_state, config=config)
+        consultation = StructuredConsultation.model_validate(json.loads(final_state["llm_response"]))
+        return ConsultationResult(patient_id=patient_id, question=question, consultation=consultation)
