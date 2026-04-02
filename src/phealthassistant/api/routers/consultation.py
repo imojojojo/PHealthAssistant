@@ -30,3 +30,11 @@ async def consult(request: ConsultationRequest, agent: LanggraphAgentDep) -> Con
     and return a structured clinical assessment.
     """
     return await agent.consult(request.patient_id, request.question)
+
+@router.post("/react", response_model=ConsultationResult)
+async def consult_react(request: ConsultationRequest, agent: LanggraphAgentDep) -> ConsultationResult:
+    """
+    Run a clinical consultation using the ReAct agent.
+    The LLM decides which tools to call and loops until it has enough to answer.
+    """
+    return await agent.consult_react(request.patient_id, request.question)

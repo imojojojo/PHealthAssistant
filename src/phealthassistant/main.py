@@ -33,6 +33,8 @@ from phealthassistant.infrastructure.data.patient_loader import PatientDataLoade
 from phealthassistant.infrastructure.llm.gemini_client import GeminiClient
 from phealthassistant.infrastructure.vector_store.chroma_store import ChromaVectorStore
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
@@ -54,13 +56,18 @@ async def lifespan(app: FastAPI):
     vector_store = ChromaVectorStore(settings)    # swap → PineconeVectorStore(settings)
     await vector_store.initialise()
 
+    chat_llm = ChatGoogleGenerativeAI(
+        model = settings.llm_chat_model,
+        google_api_key = settings.gemini_api_key,
+    )
+
     loader = PatientDataLoader(settings.data_dir)
 
     # ── Application services ──────────────────────────────────────────────────
     ingestion_service = PatientIngestionService(loader, vector_store, embedding_client)
     retrieval_service = PatientContextService(vector_store, embedding_client)
     agent_service = ClinicalAgentService(llm_client, retrieval_service)
-    langgraph_agent_service = LangGraphClinicalAgentService(llm_client, retrieval_service)
+    langgraph_agent_service = LangGraphClinicalAgentService(llm_client, retrieval_service, chat_llm)
 
     # ── Store on app.state for dependency injection ───────────────────────────
     app.state.llm_client = llm_client
