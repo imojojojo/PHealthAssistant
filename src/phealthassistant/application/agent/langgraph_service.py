@@ -1,5 +1,6 @@
 import json
 import re
+import logging
 
 from typing import Optional
 from typing_extensions import TypedDict
@@ -11,6 +12,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from phealthassistant.application.retrieval.service import PatientContextService
 from phealthassistant.application.ports.llm import LLMPort
 from phealthassistant.domain.consultation.models import ConsultationResult, StructuredConsultation
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """\
 You are a clinical decision support assistant.
@@ -37,6 +40,7 @@ class AgentState(TypedDict):
     history_text: Optional[str]
     relevant_text: Optional[str]
     llm_response: Optional[str]
+    risk_level: Optional[str]
 
 async def retrieve_context(state: AgentState, retrieval: PatientContextService) -> dict:
     history_chunks = await retrieval.get_patient_history(state["patient_id"])
@@ -59,6 +63,7 @@ async def call_llm(state: AgentState, llm: LLMPort) -> dict:
         tools=[],
         tool_executor=lambda name, args: "",
     )
+
     return {"llm_response": response}
 
 def parse_output(state: AgentState) -> dict:
@@ -70,7 +75,25 @@ def parse_output(state: AgentState) -> dict:
         text = json_matches[-1]
     data = json.loads(text)
     StructuredConsultation.model_validate(data)
-    return {"llm_response": text}
+
+    return {
+        "llm_response": text,
+        "risk_level": data.get("risk_level", "low"),
+    }
+
+def route_by_risk_level(state: AgentState) -> str:
+    if state["risk_level"] == "high":
+        return "flag_for_review"
+    
+    return END
+
+def flag_for_review(state: AgentState) -> dict:
+    logger.warning(
+        "HIGH RISK patient flagged for senior review — patient_id=%s",
+        state["patient_id"],
+    )
+
+    return {}
     
 
 def build_graph(llm: LLMPort, retrieval: PatientContextService) -> StateGraph:
@@ -83,7 +106,10 @@ def build_graph(llm: LLMPort, retrieval: PatientContextService) -> StateGraph:
     graph.add_edge(START, "retrieve_context")
     graph.add_edge("retrieve_context", "call_llm")
     graph.add_edge("call_llm", "parse_output")
-    graph.add_edge("parse_output", END)
+
+    graph.add_conditional_edges("parse_output", route_by_risk_level)
+    graph.add_edge("flag_for_review", END)
+    graph.add_node("flag_for_review", flag_for_review)
 
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)
