@@ -209,12 +209,12 @@ def build_graph(llm: LLMPort, retrieval: PatientContextService) -> StateGraph:
     graph.add_node(
         "retrieve_context",
         partial(retrieve_context, retrieval=retrieval),
-        retry = TRANSIENT_RETRY_POLICY
+        retry_policy = TRANSIENT_RETRY_POLICY
     )
 
     graph.add_node(
         "call_llm", partial(call_llm, llm=llm),
-        retry = TRANSIENT_RETRY_POLICY
+        retry_policy = TRANSIENT_RETRY_POLICY
     )
 
     graph.add_node("parse_output", parse_output)
@@ -254,13 +254,13 @@ def build_react_graph(llm: BaseChatModel, retrieval: PatientContextService) -> S
     graph.add_node(
         "call_llm_react",
         partial(call_llm_react, llm=llm_with_tools),
-        retry = TRANSIENT_RETRY_POLICY
+        retry_policy = TRANSIENT_RETRY_POLICY
     )
 
     graph.add_node(
         "execute_tools",
         partial(execute_tools, retrieval=retrieval),
-        retry = TRANSIENT_RETRY_POLICY
+        retry_policy = TRANSIENT_RETRY_POLICY
     )
 
     graph.add_node("parse_output", parse_output_react)
