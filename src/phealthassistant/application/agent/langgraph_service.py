@@ -1,6 +1,7 @@
 import json
 import re
 import logging
+import httpx
 
 from typing import Optional
 from typing_extensions import TypedDict
@@ -8,6 +9,7 @@ from typing_extensions import TypedDict
 from functools import partial
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import RetryPolicy
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, SystemMessage
 from langchain_core.language_models import BaseChatModel
 
@@ -44,6 +46,11 @@ class AgentState(TypedDict):
     llm_response: Optional[str]
     risk_level: Optional[str]
     messages: list[BaseMessage]
+
+TRANSIENT_RETRY_POLICY = RetryPolicy(
+    max_attempts = 3,
+    retry_on = (httpx.NetworkError, httpx.TimeoutException, ConnectionError),
+)
 
 async def retrieve_context(state: AgentState, retrieval: PatientContextService) -> dict:
     history_chunks = await retrieval.get_patient_history(state["patient_id"])
@@ -110,14 +117,29 @@ async def execute_tools(state: AgentState, retrieval: PatientContextService) -> 
 
 
 def parse_output(state: AgentState) -> dict:
-    text = state["llm_response"].strip()
+    text = state["llm_response"]
+
+    if not text:
+        raise ValueError("LLM returned an empty response")
+    
+    text = text.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
     json_matches = re.findall(r"\{[\s\S]*\}", text)
     if json_matches:
         text = json_matches[-1]
-    data = json.loads(text)
-    StructuredConsultation.model_validate(data)
+    
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        logger.error("LLM returned invalid JSON: %s | raw text: %r", e, text)
+        raise ValueError(f"LLM returned invalid JSON: {e}") from e
+
+    try:
+        StructuredConsultation.model_validate(data)
+    except Exception as e:
+        logger.error("LLM JSON failed schema validation: %s | data: %r", e, data)
+        raise ValueError(f"LLM response failed validation: {e}") from e
 
     return {
         "llm_response": text,
@@ -137,15 +159,29 @@ def parse_output_react(state: AgentState) -> dict:
     else:
         text = content
 
+    if not text:
+        raise ValueError("LLM returned an empty response")
+
     text = text.strip()
 
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
     json_matches = re.findall(r"\{[\s\S]*\}", text)
+
     if json_matches:
         text = json_matches[-1]
-    data = json.loads(text)
-    StructuredConsultation.model_validate(data)
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        logger.error("LLM returned invalid JSON: %s | raw text: %r", e, text)
+        raise ValueError(f"LLM returned invalid JSON: {e}") from e
+
+    try:
+        StructuredConsultation.model_validate(data)
+    except Exception as e:
+        logger.error("LLM JSON failed schema validation: %s | data: %r", e, data)
+        raise ValueError(f"LLM response failed validation: {e}") from e
     
     return {
         "llm_response": text,
@@ -170,8 +206,17 @@ def flag_for_review(state: AgentState) -> dict:
 def build_graph(llm: LLMPort, retrieval: PatientContextService) -> StateGraph:
     graph = StateGraph(AgentState)
 
-    graph.add_node("retrieve_context", partial(retrieve_context, retrieval=retrieval))
-    graph.add_node("call_llm", partial(call_llm, llm=llm))
+    graph.add_node(
+        "retrieve_context",
+        partial(retrieve_context, retrieval=retrieval),
+        retry = TRANSIENT_RETRY_POLICY
+    )
+
+    graph.add_node(
+        "call_llm", partial(call_llm, llm=llm),
+        retry = TRANSIENT_RETRY_POLICY
+    )
+
     graph.add_node("parse_output", parse_output)
 
     graph.add_edge(START, "retrieve_context")
@@ -206,8 +251,18 @@ def build_react_graph(llm: BaseChatModel, retrieval: PatientContextService) -> S
 
     graph = StateGraph(AgentState)
 
-    graph.add_node("call_llm_react", partial(call_llm_react, llm=llm_with_tools))
-    graph.add_node("execute_tools", partial(execute_tools, retrieval=retrieval))
+    graph.add_node(
+        "call_llm_react",
+        partial(call_llm_react, llm=llm_with_tools),
+        retry = TRANSIENT_RETRY_POLICY
+    )
+
+    graph.add_node(
+        "execute_tools",
+        partial(execute_tools, retrieval=retrieval),
+        retry = TRANSIENT_RETRY_POLICY
+    )
+
     graph.add_node("parse_output", parse_output_react)
 
     graph.add_edge(START, "call_llm_react")
@@ -236,7 +291,13 @@ class LangGraphClinicalAgentService:
         }
 
         config = {"configurable": {"thread_id": f"{patient_id}"}}
-        final_state = await self._graph.ainvoke(initial_state, config=config)
+        
+        try:
+            final_state = await self._graph.ainvoke(initial_state, config=config)
+        except Exception as e:
+            logger.error("Pre-fetch agent failed for patient %s: %s", patient_id, e)
+            raise
+
         consultation = StructuredConsultation.model_validate(json.loads(final_state["llm_response"]))
         return ConsultationResult(patient_id=patient_id, question=question, consultation=consultation)
     
@@ -255,6 +316,12 @@ class LangGraphClinicalAgentService:
         }
 
         config = {"configurable": {"thread_id": f"react_{patient_id}"}}
-        final_state = await self._react_graph.ainvoke(initial_state, config=config)
+
+        try:
+            final_state = await self._react_graph.ainvoke(initial_state, config=config)
+        except Exception as e:
+            logger.error("ReAct agent failed for patient %s: %s", patient_id, e)
+            raise
+
         consultation = StructuredConsultation.model_validate(json.loads(final_state["llm_response"]))
         return ConsultationResult(patient_id=patient_id, question=question, consultation=consultation)
