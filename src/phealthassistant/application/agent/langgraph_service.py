@@ -3,11 +3,12 @@ import re
 import logging
 import httpx
 
-from typing import Optional
+from typing import Annotated, Optional
 from typing_extensions import TypedDict
 
 from functools import partial
 from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import RetryPolicy
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, SystemMessage
@@ -45,7 +46,7 @@ class AgentState(TypedDict):
     relevant_text: Optional[str]
     llm_response: Optional[str]
     risk_level: Optional[str]
-    messages: list[BaseMessage]
+    messages: Annotated[list[BaseMessage], add_messages]
 
 TRANSIENT_RETRY_POLICY = RetryPolicy(
     max_attempts = 3,
@@ -78,7 +79,7 @@ async def call_llm(state: AgentState, llm: LLMPort) -> dict:
 
 async def call_llm_react(state: AgentState, llm: BaseChatModel) -> dict:
     response = await llm.ainvoke(state["messages"])
-    return {"messages": state["messages"] + [response]}
+    return {"messages": [response]}
 
 def should_continue(state: AgentState) -> str:
     last_message = state["messages"][-1]
@@ -113,7 +114,7 @@ async def execute_tools(state: AgentState, retrieval: PatientContextService) -> 
             tool_call_id=tool_call["id"],
         ))
 
-    return {"messages": state["messages"] + tool_messages}
+    return { "messages": tool_messages }
 
 
 def parse_output(state: AgentState) -> dict:
@@ -301,7 +302,31 @@ class LangGraphClinicalAgentService:
         consultation = StructuredConsultation.model_validate(json.loads(final_state["llm_response"]))
         return ConsultationResult(patient_id=patient_id, question=question, consultation=consultation)
     
-    async def consult_react(self, patient_id: str, question: str) -> ConsultationResult:
+    async def consult_react(self,
+                            patient_id: str,
+                            question: str,
+                            thread_id: str | None = None
+                        ) -> ConsultationResult:
+
+        resolved_thread_id = thread_id or f"react_{patient_id}"
+        config = {"configurable": {"thread_id": resolved_thread_id}}
+
+        existing_state = await self._react_graph.aget_state(config)
+        is_new_thread = not existing_state.values
+
+        if is_new_thread:
+            messages = [
+                SystemMessage(content=_SYSTEM_PROMPT),
+                HumanMessage(content=f"Patient ID: {patient_id}\n\nQuestion: {question}"),
+            ]
+        else:
+            messages = [
+                HumanMessage(content=(
+                    f"Follow-up question: {question}\n\n"
+                    "Remember: respond ONLY with a valid JSON object matching the required schema."
+                )),
+            ]
+
         initial_state: AgentState = {
             "patient_id": patient_id,
             "question": question,
@@ -309,13 +334,8 @@ class LangGraphClinicalAgentService:
             "relevant_text": None,
             "llm_response": None,
             "risk_level": None,
-            "messages": [
-                SystemMessage(content=_SYSTEM_PROMPT),
-                HumanMessage(content=f"Patient ID: {patient_id}\n\nQuestion: {question}")
-            ],
+            "messages": messages
         }
-
-        config = {"configurable": {"thread_id": f"react_{patient_id}"}}
 
         try:
             final_state = await self._react_graph.ainvoke(initial_state, config=config)

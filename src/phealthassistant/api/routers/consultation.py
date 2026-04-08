@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter
+from typing import Optional
 
 from phealthassistant.api.deps import AgentDep, LanggraphAgentDep
 from phealthassistant.domain.consultation.models import ConsultationResult
@@ -21,6 +22,9 @@ class ConsultationRequest(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+class ReactConsultationRequest(ConsultationRequest):
+    thread_id: Optional[str] = Field(default=None, alias="threadId")
+
 
 @router.post("", response_model=ConsultationResult)
 async def consult(request: ConsultationRequest, agent: LanggraphAgentDep) -> ConsultationResult:
@@ -32,9 +36,9 @@ async def consult(request: ConsultationRequest, agent: LanggraphAgentDep) -> Con
     return await agent.consult(request.patient_id, request.question)
 
 @router.post("/react", response_model=ConsultationResult)
-async def consult_react(request: ConsultationRequest, agent: LanggraphAgentDep) -> ConsultationResult:
+async def consult_react(request: ReactConsultationRequest, agent: LanggraphAgentDep) -> ConsultationResult:
     """
     Run a clinical consultation using the ReAct agent.
     The LLM decides which tools to call and loops until it has enough to answer.
     """
-    return await agent.consult_react(request.patient_id, request.question)
+    return await agent.consult_react(request.patient_id, request.question, request.thread_id)
