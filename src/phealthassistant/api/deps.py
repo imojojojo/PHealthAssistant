@@ -9,7 +9,6 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from phealthassistant.application.agent.service import ClinicalAgentService
 from phealthassistant.application.agent.langgraph_service import LangGraphClinicalAgentService
 from phealthassistant.application.ingestion.service import PatientIngestionService
 from phealthassistant.application.retrieval.service import PatientContextService
@@ -23,9 +22,6 @@ def _get_ingestion(request: Request) -> PatientIngestionService:
 def _get_retrieval(request: Request) -> PatientContextService:
     return request.app.state.retrieval_service
 
-
-def _get_agent(request: Request) -> ClinicalAgentService:
-    return request.app.state.agent_service
 
 def _get_langgraph_agent(request: Request) -> LangGraphClinicalAgentService:
     return request.app.state.langgraph_agent_service
@@ -41,7 +37,6 @@ def _get_embedding(request: Request) -> EmbeddingPort:
 
 IngestionDep = Annotated[PatientIngestionService, Depends(_get_ingestion)]
 RetrievalDep = Annotated[PatientContextService, Depends(_get_retrieval)]
-AgentDep = Annotated[ClinicalAgentService, Depends(_get_agent)]
 LanggraphAgentDep = Annotated[LangGraphClinicalAgentService, Depends(_get_langgraph_agent)]
 LLMDep = Annotated[LLMPort, Depends(_get_llm)]
 EmbeddingDep = Annotated[EmbeddingPort, Depends(_get_embedding)]

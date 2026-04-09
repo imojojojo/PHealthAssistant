@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class StructuredConsultation(BaseModel):
@@ -18,3 +19,13 @@ class ConsultationResult(BaseModel):
     patient_id: str
     question: str
     consultation: StructuredConsultation
+
+class ConsultationResponse(BaseModel):
+    """ Unified response model for all consultation endpoints. """
+
+    status: str  # "completed" | "pending_review"
+    thread_id: str
+    patient_id: str
+    question: str
+    consultation: Optional[StructuredConsultation] = None
+    review_decision: Optional[str] = None  # "approved" | "rejected

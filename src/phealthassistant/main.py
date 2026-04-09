@@ -21,7 +21,6 @@ from phealthassistant.api.exception_handlers import (
     value_error_handler,
 )
 from phealthassistant.api.routers import admin, consultation, health, patients
-from phealthassistant.application.agent.service import ClinicalAgentService
 from phealthassistant.application.agent.langgraph_service import LangGraphClinicalAgentService
 from phealthassistant.application.ingestion.service import PatientIngestionService
 from phealthassistant.application.retrieval.service import PatientContextService
@@ -66,15 +65,13 @@ async def lifespan(app: FastAPI):
     # ── Application services ──────────────────────────────────────────────────
     ingestion_service = PatientIngestionService(loader, vector_store, embedding_client)
     retrieval_service = PatientContextService(vector_store, embedding_client)
-    agent_service = ClinicalAgentService(llm_client, retrieval_service)
-    langgraph_agent_service = LangGraphClinicalAgentService(llm_client, retrieval_service, chat_llm)
+    langgraph_agent_service = LangGraphClinicalAgentService(chat_llm, retrieval_service)
 
     # ── Store on app.state for dependency injection ───────────────────────────
     app.state.llm_client = llm_client
     app.state.embedding_client = embedding_client
     app.state.ingestion_service = ingestion_service
     app.state.retrieval_service = retrieval_service
-    app.state.agent_service = agent_service
     app.state.langgraph_agent_service = langgraph_agent_service
 
     logger.info("PHealthAssistant started — all services ready")
