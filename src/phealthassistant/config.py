@@ -6,7 +6,8 @@ class Settings(BaseSettings):
 
     # LLM provider
     gemini_api_key: str
-    llm_chat_model: str = "gemini-2.5-flash"
+    openai_api_key: str
+    llm_chat_model: str = "gpt-4o-mini"
     llm_embedding_model: str = "gemini-embedding-001"
 
     # Vector store

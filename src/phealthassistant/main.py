@@ -22,6 +22,7 @@ from phealthassistant.api.exception_handlers import (
 )
 from phealthassistant.api.routers import admin, consultation, health, patients
 from phealthassistant.application.agent.langgraph_service import LangGraphClinicalAgentService
+from phealthassistant.application.agent.multi_agent_service import MultiAgentClinicalService
 from phealthassistant.application.ingestion.service import PatientIngestionService
 from phealthassistant.application.retrieval.service import PatientContextService
 from phealthassistant.config import Settings
@@ -32,7 +33,7 @@ from phealthassistant.infrastructure.data.patient_loader import PatientDataLoade
 from phealthassistant.infrastructure.llm.gemini_client import GeminiClient
 from phealthassistant.infrastructure.vector_store.chroma_store import ChromaVectorStore
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,9 +56,9 @@ async def lifespan(app: FastAPI):
     vector_store = ChromaVectorStore(settings)    # swap → PineconeVectorStore(settings)
     await vector_store.initialise()
 
-    chat_llm = ChatGoogleGenerativeAI(
-        model = settings.llm_chat_model,
-        google_api_key = settings.gemini_api_key,
+    chat_llm = ChatOpenAI(
+        model=settings.llm_chat_model,
+        api_key=settings.openai_api_key,
     )
 
     loader = PatientDataLoader(settings.data_dir)
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI):
     ingestion_service = PatientIngestionService(loader, vector_store, embedding_client)
     retrieval_service = PatientContextService(vector_store, embedding_client)
     langgraph_agent_service = LangGraphClinicalAgentService(chat_llm, retrieval_service)
+    multi_agent_service = MultiAgentClinicalService(chat_llm, retrieval_service)
 
     # ── Store on app.state for dependency injection ───────────────────────────
     app.state.llm_client = llm_client
@@ -73,6 +75,7 @@ async def lifespan(app: FastAPI):
     app.state.ingestion_service = ingestion_service
     app.state.retrieval_service = retrieval_service
     app.state.langgraph_agent_service = langgraph_agent_service
+    app.state.multi_agent_service = multi_agent_service
 
     logger.info("PHealthAssistant started — all services ready")
     yield

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter
 from typing import Optional
 
-from phealthassistant.api.deps import LanggraphAgentDep
+from phealthassistant.api.deps import LanggraphAgentDep, MultiAgentDep
 from phealthassistant.domain.consultation.models import ConsultationResponse
 
 router = APIRouter(prefix="/consultation", tags=["Consultation"])
@@ -54,5 +54,23 @@ async def resume(request: ResumeRequest, agent: LanggraphAgentDep) -> Consultati
     """
     Resume a pending consultation that was paused for senior doctor review.
     Pass the threadId from the pending_review response and a decision (approved/rejected).
+    """
+    return await agent.resume_review(request.thread_id, request.decision)
+
+
+@router.post("/multi", response_model=ConsultationResponse)
+async def multi_agent_consult(request: ConsultationRequest, agent: MultiAgentDep) -> ConsultationResponse:
+    """
+    Run a multi-agent clinical consultation.
+    A supervisor routes the question to specialist agents (medication, risk assessment)
+    and synthesizes their results into a final consultation.
+    """
+    return await agent.consult(request.patient_id, request.question, request.thread_id)
+
+
+@router.post("/multi/resume", response_model=ConsultationResponse)
+async def multi_agent_resume(request: ResumeRequest, agent: MultiAgentDep) -> ConsultationResponse:
+    """
+    Resume a pending multi-agent consultation that was paused for senior doctor review.
     """
     return await agent.resume_review(request.thread_id, request.decision)
