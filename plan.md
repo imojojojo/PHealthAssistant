@@ -60,15 +60,21 @@ Each step builds on the previous one. Complete them in order.
 - Compose them into a coordinator graph
 - Learn: nested graphs, agent handoffs, supervisor pattern
 
-### Step F — Deployment
-*Deploy the agent so clients can access it over the internet*
+### Step F — Deployment Tier 1: Self-hosted FastAPI on Fly.io / Railway
+*Deploy the agent so clients can access it over the internet — cheap/free, full control*
 
 - Dockerize the app (Dockerfile, docker-compose with ChromaDB)
-- Environment variable management for secrets (API keys)
-- Deploy to Google Cloud Run (or Railway for simplicity)
+- Environment variable management for secrets (OpenAI API key, etc.)
+- Deploy to Fly.io or Railway free tier (or Hetzner ~€4/mo for more headroom)
 - Handle ChromaDB data persistence with mounted volumes
 - Health checks and graceful shutdown
-- Learn: containerization, cloud deployment, secrets management
+- Add `guardrails-ai` as a library for PII / output validation (guardrails story on resume)
+- Wire up **LangSmith free tier for tracing only** — no paid deployment, just observability
+- Learn: containerization, cloud deployment, secrets management, agent observability
+
+**Why this tier first:** Near-zero cost while learning. Your hexagonal architecture already
+makes the app portable. LangSmith tracing gives you the debugging UI without vendor lock-in
+on the deployment layer. Good enough for a live client demo.
 
 ### Step G — LangGraph Visualization & Observability
 *Understand and monitor what the agent is doing*
@@ -90,6 +96,32 @@ Each step builds on the previous one. Complete them in order.
 - Swap MemorySaver for SqliteSaver
 - Understand the trade-offs vs PostgresSaver
 - Learn: checkpointer interfaces, connection management
+
+### Step J — Deployment Tier 2: AWS Bedrock AgentCore
+*Port the same agent to AWS Bedrock AgentCore — the enterprise resume differentiator*
+
+- Install AgentCore CLI and scaffold a LangGraph project (`agentcore create`)
+- Wrap the existing StateGraph with `BedrockAgentCoreApp` — minimal code changes thanks to
+  the hexagonal architecture
+- Keep OpenAI as the LLM provider (AgentCore Runtime is model-agnostic — your OpenAI key works)
+- Store the OpenAI key in AWS Secrets Manager, inject at runtime
+- Swap the Postgres/Sqlite checkpointer for **AgentCoreMemorySaver** (native LangGraph
+  checkpointer for AgentCore Memory)
+- Add **AgentCore Memory Store** for long-term memory across sessions (actor_id + thread_id)
+- Enable **Bedrock Guardrails** for PII detection, toxicity, and topic filtering — works even
+  with OpenAI as the underlying model
+- Wire up **AgentCore Observability** (CloudWatch traces for agent reasoning, tool calls, LLM interactions)
+- Deploy with `agentcore deploy`; test with `agentcore invoke`
+- Optional: AgentCore Gateway to expose tools via MCP, AgentCore Identity for user auth
+- Learn: serverless microVM agent runtime, AWS IAM for agents, enterprise-grade guardrails
+  and observability, session isolation
+
+**Why this tier second:** Highest-leverage resume move. "Deployed the same LangGraph agent on
+AgentCore with Bedrock Guardrails, AgentCore Memory, and microVM session isolation" is exactly
+the enterprise agentic systems narrative. Consumption-based pricing (I/O wait and idle time are
+free, per-second CPU/memory billing) means it costs pennies while experimenting, and new AWS
+accounts get $200 in free tier credits.
+
 
 ---
 
@@ -122,18 +154,23 @@ D (Human-in-the-loop)       ← most unique LangGraph capability
   ↓
 E (Sub-graphs)              ← true enterprise architecture
   ↓
-F (Deployment)              ← show client a live system
+F (Deploy Tier 1: Fly.io)   ← cheap live system for client demos
   ↓
 G (Visualization)           ← understand complex graphs you build
   ↓
 H (Streaming)               ← production UX requirement
   ↓
 I (Production Checkpointer) ← final piece for production readiness
+  ↓
+J (Deploy Tier 2: AgentCore)← enterprise resume differentiator
 ```
 
 **Why this order:**
 - A and B first — a fragile agent that crashes on bad input is not learnable or testable
 - C before D — you need to understand stateful conversations before pausing them
 - E after D — sub-graphs compose the patterns from all previous steps
-- F after E — deploy the multi-agent system for client demos
-- G, H, I last — polish and production-readiness, can redeploy incrementally
+- F after E — deploy the multi-agent system cheaply for client demos and learning
+- G, H, I — polish and production-readiness on the Tier 1 deployment
+- J last — port the hardened agent to AgentCore once it's genuinely production-ready;
+  this tier is about enterprise credentials (guardrails, microVM isolation, managed memory),
+  not about learning LangGraph itself
